@@ -53,6 +53,10 @@ export default function Checkout() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [shippingRates, setShippingRates] = useState<ShippingRate[]>([]);
   const [isLoadingRates, setIsLoadingRates] = useState(true);
+  
+  // Spam protection: Track form load time and honeypot field
+  const [formLoadTime] = useState(() => Date.now());
+  const [honeypotValue, setHoneypotValue] = useState('');
 
   // Fetch shipping rates from database
   useEffect(() => {
@@ -170,6 +174,19 @@ export default function Checkout() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Spam protection: Check honeypot field (bots auto-fill hidden fields)
+    if (honeypotValue.trim() !== '') {
+      toast.error('Invalid submission detected. Please try again.');
+      return;
+    }
+    
+    // Spam protection: Check form timing (bots submit too quickly)
+    const timeSinceLoad = Date.now() - formLoadTime;
+    if (timeSinceLoad < 5000) {
+      toast.error('Please take your time filling out the form.');
+      return;
+    }
+    
     if (!validateForm()) {
       toast.error('Please fill in all required fields correctly');
       return;
@@ -178,15 +195,15 @@ export default function Checkout() {
     setIsSubmitting(true);
 
     try {
-      // Prepare order items as JSON
+      // Prepare order items as JSON (matching OrderItem interface)
       const orderItems = items.map(item => ({
-        productId: item.product.id,
-        productName: item.product.name,
-        productImage: item.product.image,
+        id: item.product.id,
+        name: item.product.name,
+        image: item.product.image,
         price: item.product.price,
         quantity: item.quantity,
-        selectedSize: item.selectedSize,
-        selectedColor: item.selectedColor,
+        size: item.selectedSize,
+        color: item.selectedColor,
         subtotal: item.product.price * item.quantity
       }));
 
@@ -441,6 +458,25 @@ export default function Checkout() {
                     rows={3}
                   />
                 </div>
+                
+                {/* Honeypot field - Hidden from users, bots will fill it */}
+                <input
+                  type="text"
+                  name="website"
+                  value={honeypotValue}
+                  onChange={(e) => setHoneypotValue(e.target.value)}
+                  style={{
+                    position: 'absolute',
+                    left: '-9999px',
+                    width: '1px',
+                    height: '1px',
+                    opacity: 0,
+                    pointerEvents: 'none',
+                    tabIndex: -1
+                  }}
+                  aria-hidden="true"
+                  autoComplete="off"
+                />
               </div>
 
               {/* Order Summary */}

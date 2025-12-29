@@ -72,7 +72,7 @@ export default function AdminShipping() {
         stop_desk_cost: existing?.stop_desk_cost ?? w.stopDeskEcommerce,
         is_active: existing?.is_active ?? true,
       };
-    }).sort((a, b) => a.wilaya_name.localeCompare(b.wilaya_name));
+    }).sort((a, b) => a.wilaya_id - b.wilaya_id);
 
     setRates(mergedRates);
     setIsLoading(false);

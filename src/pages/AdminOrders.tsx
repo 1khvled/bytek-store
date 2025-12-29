@@ -111,11 +111,29 @@ export default function AdminOrders() {
         variant: 'destructive',
       });
     } else {
-      // Parse items from JSONB
-      const parsedOrders = (data || []).map(order => ({
-        ...order,
-        items: typeof order.items === 'string' ? JSON.parse(order.items) : order.items,
-      }));
+      // Parse items from JSONB and normalize field names (handle both old and new formats)
+      const parsedOrders = (data || []).map(order => {
+        let items = typeof order.items === 'string' ? JSON.parse(order.items) : order.items;
+        
+        // Normalize field names: convert old format to new format if needed
+        if (Array.isArray(items)) {
+          items = items.map((item: any) => ({
+            id: item.id || item.productId,
+            name: item.name || item.productName,
+            image: item.image || item.productImage,
+            price: item.price,
+            quantity: item.quantity,
+            size: item.size || item.selectedSize,
+            color: item.color || item.selectedColor,
+            subtotal: item.subtotal || (item.price * item.quantity)
+          }));
+        }
+        
+        return {
+          ...order,
+          items
+        };
+      });
       setOrders(parsedOrders);
     }
     setIsLoading(false);
@@ -354,25 +372,42 @@ export default function AdminOrders() {
               <div>
                 <h3 className="font-semibold mb-3">Order Items</h3>
                 <div className="space-y-3">
-                  {selectedOrder.items.map((item, idx) => (
-                    <div key={idx} className="flex items-center gap-4 bg-muted/30 rounded-lg p-3">
-                      <img 
-                        src={item.image} 
-                        alt={item.name}
-                        className="w-16 h-16 object-cover rounded-lg"
-                      />
-                      <div className="flex-1">
-                        <p className="font-medium">{item.name}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {item.size && `Size: ${item.size}`}
-                          {item.size && item.color && ' • '}
-                          {item.color && `Color: ${item.color}`}
-                        </p>
-                        <p className="text-sm text-muted-foreground">Qty: {item.quantity}</p>
-                      </div>
-                      <p className="font-medium">{(item.price * item.quantity).toLocaleString()} DZD</p>
-                    </div>
-                  ))}
+                  {selectedOrder.items && selectedOrder.items.length > 0 ? (
+                    selectedOrder.items.map((item: any, idx: number) => {
+                      // Handle both old and new field names
+                      const itemName = item.name || item.productName || 'Unknown Product';
+                      const itemImage = item.image || item.productImage || '/placeholder.svg';
+                      const itemSize = item.size || item.selectedSize;
+                      const itemColor = item.color || item.selectedColor;
+                      const itemPrice = item.price || 0;
+                      const itemQuantity = item.quantity || 1;
+                      
+                      return (
+                        <div key={idx} className="flex items-center gap-4 bg-muted/30 rounded-lg p-3">
+                          <img 
+                            src={itemImage} 
+                            alt={itemName}
+                            className="w-16 h-16 object-cover rounded-lg"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = '/placeholder.svg';
+                            }}
+                          />
+                          <div className="flex-1">
+                            <p className="font-medium">{itemName}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {itemSize && `Size: ${itemSize}`}
+                              {itemSize && itemColor && ' • '}
+                              {itemColor && `Color: ${itemColor}`}
+                            </p>
+                            <p className="text-sm text-muted-foreground">Qty: {itemQuantity}</p>
+                          </div>
+                          <p className="font-medium">{(itemPrice * itemQuantity).toLocaleString()} DZD</p>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <p className="text-muted-foreground">No items found in this order</p>
+                  )}
                 </div>
               </div>
 
