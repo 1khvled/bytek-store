@@ -17,24 +17,16 @@ SET search_path = public
 AS $$
 DECLARE
   edge_function_url TEXT;
-  service_role_key TEXT;
+  anon_key TEXT;
   payload JSONB;
   request_id BIGINT;
 BEGIN
   -- Construct edge function URL
-  -- Replace 'ysmooabkfrnuawdqpvxt' with your actual project ref if different
   edge_function_url := 'https://ysmooabkfrnuawdqpvxt.supabase.co/functions/v1/notify-admin-order';
   
-  -- Get service role key from environment (set via Supabase Dashboard → Settings → API)
-  -- This should be set as a database setting or use anon key for public functions
-  service_role_key := current_setting('app.settings.service_role_key', true);
-  
-  -- If no service role key, use anon key (less secure but works for public functions)
-  IF service_role_key IS NULL OR service_role_key = '' THEN
-    -- You can set this via: ALTER DATABASE postgres SET app.settings.service_role_key = 'your-key';
-    -- Or use anon key (function should handle auth internally)
-    service_role_key := current_setting('app.settings.anon_key', true);
-  END IF;
+  -- Anon key hardcoded (get from Supabase Dashboard → Settings → API)
+  -- This is safe because anon key is meant to be public (used in frontend)
+  anon_key := 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlzbW9vYWJrZnJudWF3ZHFwdnh0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcwMjc5MTMsImV4cCI6MjA4MjYwMzkxM30.uMcWOV_wOXRpsfHxvVuzhU8D4H6VAlyfSHQ5YDNikBk';
 
   -- Prepare payload with order data
   payload := jsonb_build_object(
@@ -52,38 +44,39 @@ BEGIN
     )
   );
 
-  -- Call the edge function asynchronously using pg_net
+  -- Call the edge function asynchronously using pg_net with anon key
   -- This doesn't block the order insertion
-  -- Note: Edge function should be configured to allow unauthenticated calls from database triggers
-  -- Or use service role key if authentication is required
-  IF service_role_key IS NOT NULL AND service_role_key != '' THEN
+  -- Using anon key allows the function to be called (function is public and accepts anon key)
+  BEGIN
     SELECT net.http_post(
       url := edge_function_url,
       headers := jsonb_build_object(
         'Content-Type', 'application/json',
-        'Authorization', 'Bearer ' || service_role_key
+        'Authorization', 'Bearer ' || anon_key
       )::text,
-      body := payload::text
+      body := payload::text,
+      timeout_milliseconds := 30000
     ) INTO request_id;
-  ELSE
-    -- Call without auth header (function should handle this or be configured as public)
-    SELECT net.http_post(
-      url := edge_function_url,
-      headers := jsonb_build_object(
-        'Content-Type', 'application/json'
-      )::text,
-      body := payload::text
-    ) INTO request_id;
-  END IF;
+    
+    -- Log success (check Supabase logs for this)
+    RAISE NOTICE 'Triggered admin notification for order % (request_id: %)', NEW.order_number, request_id;
+  EXCEPTION
+    WHEN OTHERS THEN
+      -- Log detailed error
+      RAISE WARNING 'Failed to call edge function for order %: %', NEW.order_number, SQLERRM;
+  END;
 
   RETURN NEW;
 EXCEPTION
   WHEN OTHERS THEN
     -- Log error but don't fail the order insertion
-    RAISE WARNING 'Failed to trigger admin notification: %', SQLERRM;
+    RAISE WARNING 'Failed to trigger admin notification for order %: %', NEW.order_number, SQLERRM;
     RETURN NEW;
 END;
 $$;
+
+-- Drop trigger if it exists (for idempotency)
+DROP TRIGGER IF EXISTS notify_admin_on_new_order ON public.orders;
 
 -- Create trigger on order insertion
 CREATE TRIGGER notify_admin_on_new_order

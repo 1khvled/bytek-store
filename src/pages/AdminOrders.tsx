@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { 
   ArrowLeft, ShoppingCart, Search, Eye, Save, X, Truck,
-  Package, Clock, CheckCircle, XCircle
+  Package, Clock, CheckCircle, XCircle, Trash2
 } from 'lucide-react';
 import {
   Dialog,
@@ -147,6 +147,34 @@ export default function AdminOrders() {
       estimated_delivery: order.estimated_delivery || '',
     });
     setIsDialogOpen(true);
+  };
+
+  const handleDeleteOrder = async (orderId: string, orderNumber: string) => {
+    if (!confirm(`Are you sure you want to delete order ${orderNumber}? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('orders')
+        .delete()
+        .eq('id', orderId);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Order deleted',
+        description: `Order ${orderNumber} has been deleted successfully.`,
+      });
+      fetchOrders();
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
+      toast({
+        title: 'Error deleting order',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+    }
   };
 
   const handleSave = async () => {
@@ -309,14 +337,24 @@ export default function AdminOrders() {
                             {format(new Date(order.created_at), 'MMM d, yyyy')}
                           </td>
                           <td className="p-4">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleViewOrder(order)}
-                            >
-                              <Eye className="w-4 h-4 mr-1" />
-                              View
-                            </Button>
+                            <div className="flex items-center justify-end gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleViewOrder(order)}
+                              >
+                                <Eye className="w-4 h-4 mr-1" />
+                                View
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleDeleteOrder(order.id, order.order_number)}
+                                className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
                           </td>
                         </tr>
                       ))}

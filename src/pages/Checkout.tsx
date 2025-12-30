@@ -208,7 +208,7 @@ export default function Checkout() {
       }));
 
       // Create order in Supabase
-      const { error } = await supabase
+      const { data: orderData, error } = await supabase
         .from('orders')
         .insert([{
           customer_name: formData.fullName,
@@ -227,9 +227,37 @@ export default function Checkout() {
           payment_status: 'pending',
           payment_method: 'cod',
           order_number: `ORD-${Date.now()}`
-        }]);
+        }])
+        .select()
+        .single();
 
       if (error) throw error;
+
+      // Send customer confirmation email if email provided
+      if (formData.email && orderData) {
+        try {
+          const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+          const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+          
+          await fetch(`${supabaseUrl}/functions/v1/notify-customer-order`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${anonKey}`,
+            },
+            body: JSON.stringify({
+              order: {
+                ...orderData,
+                items: orderItems,
+              }
+            }),
+          });
+          // Don't fail order creation if email fails
+        } catch (emailError) {
+          console.error('Failed to send confirmation email:', emailError);
+          // Continue anyway - order is created
+        }
+      }
 
       // Clear cart and redirect
       clearCart();
